@@ -1,3 +1,22 @@
+# ForgeHub Android aarch64 dependency lock -- GENERATED FILE, do not hand-edit.
+# Regenerate with: bash packaging/android/verify-aarch64-deps.sh --freeze
+# Verify with:     bash packaging/android/verify-aarch64-deps.sh --lock
+#
+# generated:    2026-10-27T21:49:01Z
+# mode:         freeze
+# container:    Ubuntu 24.04.5 LTS
+# uname -m:     aarch64
+# python:       Python 3.12.3
+# pip:          pip 24.0 from /opt/venv/lib/python3.12/site-packages/pip (python 3.12)
+# wheel source: host-populated wheelhouse at /wheels (--no-index --find-links)
+# pytest:       33 passed, 1 warning in 13.98s (baseline 33 passed)
+# omitted:      (none)
+# downgraded:   (none)
+#
+# pip itself is intentionally not pinned (supplied by the guest's venv).
+# setuptools/wheel ARE pinned: the project is installed with
+# --no-build-isolation against them, so the build backend never comes
+# from an unpinned network fetch.
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.5
 aiosignal==1.4.0
@@ -31,6 +50,7 @@ pytest-asyncio==1.4.1
 python-dotenv==1.2.4
 python-multipart==0.0.32
 PyYAML==6.0.3
+setuptools==84.2.1
 starlette==1.10.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
@@ -38,4 +58,5 @@ uvicorn==0.54.0
 uvloop==0.23.0
 watchfiles==1.3.0
 websockets==17.3
+wheel==0.48.0
 yarl==1.25.1
