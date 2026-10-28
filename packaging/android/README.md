@@ -92,6 +92,67 @@ exercise directly (no Termux/proot-distro involved); `install.sh`'s own
 guard clauses can only be smoke-checked the same way — see
 `tests/test_install_idempotent.sh` and `tests/test_ffmpeg_required.sh`.
 
+## Running the backend: `start-backend.sh`
+
+Once `install.sh` has provisioned the guest, start the backend with:
+
+```bash
+bash packaging/android/start-backend.sh
+```
+
+This is what makes the backend survive the screen turning off mid-job: it
+takes a `termux-wake-lock` (so Android's power manager doesn't suspend the
+guest's CPU on screen-off), raises a persistent `termux-notification` with a
+Stop button, launches `proot-distro login ubuntu --
+~/ForgeHub/.venv/bin/uvicorn forgehub_backend.main:app --host 127.0.0.1
+--port 8484`, and releases the wake-lock / dismisses the notification on
+every exit path via a trap — normal exit, the Stop button, Ctrl-C, or an
+external `kill`. It also refuses to start a second instance if `/config`
+already answers on the same port, and points `FORGEHUB_FRONTEND_DIR` at
+`packaging/android/dist` when that directory exists (see above) — never
+failing to start just because the frontend build hasn't landed yet.
+
+The backend binds `127.0.0.1:8484` **only**. There is no authentication of
+any kind on the phone, and the Runpod API key lives in `data/settings.json`
+— a backend reachable from the local Wi-Fi would hand that key to anyone on
+the same network. `tests/test_backend_liveness.sh` asserts this with `ss`
+(socket present on `127.0.0.1:8484`, absent on `0.0.0.0:8484`); the script
+checks it again itself, best-effort, right after starting.
+
+`termux-wake-lock` / `termux-notification` / `proot-distro` are Termux-only
+and do not exist in a plain container. Set `FORGEHUB_NO_TERMUX=1` to skip
+them explicitly (the script says plainly which calls it skipped — it never
+pretends to have taken a wake-lock or raised a notification it did not) and
+run the guest's own venv directly instead of through `proot-distro login`.
+This is the escape hatch `tests/test_backend_liveness.sh` uses to exercise
+everything else — the real backend start, the second-instance guard, the
+local-only bind, the cleanup trap — inside `tests/_arm64.sh`'s container.
+
+## Autostart on boot: Termux:Boot
+
+`boot/start-forgehub.sh` is a one-line Termux:Boot entry point that
+delegates to `start-backend.sh`, so the backend comes up automatically after
+a reboot without the owner opening Termux. Two manual, one-time steps are
+required for this to work at all — there is no way to script around either:
+
+1. Install the **Termux:Boot** app from **F-Droid** (not the Play Store —
+   that build is a different, often-stale release).
+2. **Open the Termux:Boot app once** after installing it. Android does not
+   deliver the boot broadcast to an app the user has never launched; this
+   one launch is what registers the receiver. Skipping it is the single
+   most common reason autostart silently does nothing after a reboot.
+
+Then, in Termux:
+
+```bash
+mkdir -p ~/.termux/boot
+cp ~/ForgeHub/packaging/android/boot/start-forgehub.sh ~/.termux/boot/
+chmod +x ~/.termux/boot/start-forgehub.sh
+```
+
+Boot-time output (no terminal is attached that early) goes to
+`~/forgehub-backend-boot.log`.
+
 ## Baseline commands
 
 These are the commands later tasks must not regress. Run from a clean
