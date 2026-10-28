@@ -63,6 +63,35 @@ build output lives at a different, android-only path that upstream's
 This task does not build or commit that directory — only documents the rule
 for the tasks that do.
 
+## Installing on the phone
+
+`install.sh` (run once, in Termux proper) and `guest-provision.sh` (run
+inside the `proot-distro` Ubuntu guest, either by `install.sh` or directly
+for testing) provision everything the backend needs: system packages
+(including `ffmpeg`/`ffprobe`, a hard precondition — video/audio workflows
+shell out to both), a clone of this fork, a venv, and the dependency set
+pinned in `requirements.lock.txt`. Both scripts are idempotent: re-running
+them picks up a fork update without re-cloning or touching an existing
+`data/settings.json` (which may hold the owner's Runpod API key).
+
+```bash
+FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git \
+  bash packaging/android/install.sh
+```
+
+`FORGEHUB_REPO_URL` is **required** — this is a fork of a third-party
+repository and its URL is not hardcoded anywhere in these scripts. Optional
+`FORGEHUB_REPO_BRANCH` (default `android`) selects which branch to track.
+
+Until Task 6 commits `packaging/android/dist/` (see above), provisioning
+succeeds and warns, rather than failing: the backend's API is fully usable
+without the built frontend, only `/` has nothing to serve yet.
+
+`guest-provision.sh` is the part Task 2's `tests/_arm64.sh` container can
+exercise directly (no Termux/proot-distro involved); `install.sh`'s own
+guard clauses can only be smoke-checked the same way — see
+`tests/test_install_idempotent.sh` and `tests/test_ffmpeg_required.sh`.
+
 ## Baseline commands
 
 These are the commands later tasks must not regress. Run from a clean
