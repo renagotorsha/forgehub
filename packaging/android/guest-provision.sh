@@ -4,9 +4,15 @@
 # tests/_arm64.sh and tests/test_install_idempotent.sh). Provisions
 # everything the backend needs: system packages, a clone of the fork's
 # branch, and a venv with the project installed strictly from
-# packaging/android/requirements.lock.txt -- reproducing exactly what
-# verify-aarch64-deps.sh's `--lock` mode proved works on this architecture
-# (Task 2).
+# packaging/android/requirements.lock.txt -- the same pip-install-from-lock
+# command shape verify-aarch64-deps.sh's `--lock` mode proved works on this
+# architecture (Task 2). The two scripts get there by different paths
+# (tar-copy vs. git-clone), so this script does not just trust that a zero
+# pip exit code here means the same thing it meant there -- it re-runs
+# `--lock` mode's own import check (pydantic/aiohttp/PIL/numpy/yaml plus the
+# project package itself) through the venv's own interpreter before
+# declaring success. It does not repeat `--lock` mode's full pytest run;
+# that is Task 2's job, not every phone re-provision's.
 #
 # Idempotent: safe to run repeatedly, e.g. to pick up a fork update. Every
 # stage checks whether it already happened and skips with an
@@ -157,6 +163,31 @@ echo "-- pip install --no-deps --no-build-isolation . (project itself; deps alre
 # its finder into a throwaway env regardless of what the lock pins -- see
 # verify-aarch64-deps.sh's BUILD_DEPS comment for the full reasoning.
 "${VENV}/bin/pip" install "${PIP_SOURCE_FLAGS[@]}" --no-build-isolation --no-deps .
+
+# A zero exit from the pip installs above is necessary but not sufficient.
+# verify-aarch64-deps.sh's `--lock` mode -- the thing this script's own
+# header claims to reproduce -- only counts as proof because it follows the
+# install with exactly this import check (plus a full pytest run this
+# script is too cheap to repeat on every phone re-provision). The
+# clone-then-pip-install path above is not byte-for-byte identical to that
+# script's tar-copy-then-pip-install path, so without re-running the check
+# here, Task 2's proof never actually transfers to this script. Importing
+# through the venv's own interpreter (not system python3) is what confirms
+# the venv itself -- not some unrelated system package -- satisfies these.
+echo "-- verifying the installed venv actually works (import check) --"
+if ! VERIFY_OUTPUT="$("${VENV}/bin/python3" -c "
+import pydantic, aiohttp, PIL, numpy, yaml
+from pydantic import BaseModel
+import forgehub_backend
+print('deps-ok')
+" 2>&1)"; then
+  echo "FATAL: pip install exited 0, but importing pydantic/aiohttp/PIL/numpy/" >&2
+  echo "FATAL: yaml/forgehub_backend through ${VENV}/bin/python3 failed:" >&2
+  echo "${VERIFY_OUTPUT}" | sed 's/^/FATAL:   /' >&2
+  echo "FATAL: provisioning did NOT succeed -- refusing to report success." >&2
+  exit 1
+fi
+echo "-- ${VERIFY_OUTPUT} -- the installed venv imports everything it needs --"
 
 SETTINGS_FILE="${REPO_DIR}/data/settings.json"
 mkdir -p "$(dirname "${SETTINGS_FILE}")"

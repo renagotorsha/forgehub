@@ -9,6 +9,14 @@
 #   - ~/ForgeHub is not re-cloned into a second copy
 #   - the run's own log says "already provisioned"
 #
+# It also asserts a fourth, separate property when a wheelhouse is mounted
+# at /wheels (i.e. the caller set FORGEHUB_WHEELHOUSE, which
+# test_install_idempotent.sh now defaults to Task 2's host wheelhouse): that
+# guest-provision.sh's pip installs make zero network fetches, reproducing
+# the offline-install property Task 2 established for `--lock` mode. If no
+# wheelhouse is mounted, that specific assertion is skipped explicitly and
+# loudly -- never silently treated as passed.
+#
 # FORGEHUB_REPO_URL must already be set by the caller. A local clone source
 # (file:///workspace, the same read-only checkout _arm64.sh mounts) stands
 # in for the fork's not-yet-public URL -- see controller ruling 1 in Task
@@ -102,6 +110,37 @@ if grep -q "already provisioned" /tmp/second-run.log; then
 else
   echo "FAIL -- second run's log never says 'already provisioned'" >&2
   FAIL=1
+fi
+
+echo "########## offline-install assertion ##########"
+# "Downloading <name>-<version>...whl" is pip's own wording for a real
+# network fetch of a wheel (see tests/_verify_lib.sh's fixtures, which
+# capture this exact phrasing from real pip output). A wheelhouse install
+# via --no-index --find-links=/wheels instead prints "Processing
+# /wheels/<file>.whl" for every package, and skips the network-only `pip
+# install --upgrade pip` step entirely (guest-provision.sh:143-150) -- so
+# zero matches here is precisely the offline property Task 2 established
+# for `--lock` mode and this script must reproduce. Anchored on ".whl" so
+# it can't be confused with git's unrelated "Downloading objects" chatter
+# from the earlier clone/pull step.
+NETWORK_FETCH_PATTERN='Downloading .*\.whl'
+if [[ -d /wheels ]]; then
+  for log in /tmp/first-run.log /tmp/second-run.log; do
+    if grep -qE "${NETWORK_FETCH_PATTERN}" "${log}"; then
+      echo "FAIL -- ${log} shows pip fetching a wheel over the network despite" >&2
+      echo "FAIL -- /wheels being mounted -- offline-install property broken:" >&2
+      grep -E "${NETWORK_FETCH_PATTERN}" "${log}" | sed 's/^/FAIL:   /' >&2
+      FAIL=1
+    else
+      echo "ok   -- ${log} shows zero network wheel fetches (offline-install property holds)"
+    fi
+  done
+else
+  echo "WARNING: /wheels is not mounted in this container -- no wheelhouse was" >&2
+  echo "WARNING: supplied (FORGEHUB_WHEELHOUSE was unset and unavailable on the" >&2
+  echo "WARNING: host). SKIPPING the offline-install assertion explicitly: this run" >&2
+  echo "WARNING: proves idempotency only, NOT that guest-provision.sh's installs" >&2
+  echo "WARNING: make zero network fetches. It is not reported as passed." >&2
 fi
 
 if [[ "${FAIL}" -eq 0 ]]; then
