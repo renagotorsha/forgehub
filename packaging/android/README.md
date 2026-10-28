@@ -119,6 +119,15 @@ the same network. `tests/test_backend_liveness.sh` asserts this with `ss`
 (socket present on `127.0.0.1:8484`, absent on `0.0.0.0:8484`); the script
 checks it again itself, best-effort, right after starting.
 
+`start-backend.sh` also sets `FORGEHUB_CORS_ORIGINS=http://127.0.0.1:8484`
+(the GUI's own origin) when launching uvicorn, because upstream's own
+default is `*` combined with `allow_credentials=True` — permissive enough
+that any web page open in any browser on the phone, not just this app's
+WebView, could read `/settings` (the Runpod API key) and spend GPU credits
+via `/execute`. `tests/test_backend_liveness.sh` asserts the running
+backend does not echo back a foreign `Origin` header (nor answer with a
+bare `*`).
+
 `termux-wake-lock` / `termux-notification` / `proot-distro` are Termux-only
 and do not exist in a plain container. Set `FORGEHUB_NO_TERMUX=1` to skip
 them explicitly (the script says plainly which calls it skipped — it never

@@ -122,6 +122,28 @@ else
   ok "nothing listens on 0.0.0.0:${PORT} (bind is local-only, as required)"
 fi
 
+echo "########## security assertion: CORS must not echo back an arbitrary origin ##########"
+# start-backend.sh sets FORGEHUB_CORS_ORIGINS to the GUI's own origin
+# precisely because upstream defaults it to "*" with allow_credentials=True
+# (forgehub_backend/config.py:21, main.py:66-70), which lets any web page on
+# the phone read /settings (the Runpod API key) and spend GPU credits via
+# /execute -- see start-backend.sh's own CORS comment for the full
+# reasoning. Prove that fix is actually in effect on the running backend by
+# sending a request with a foreign Origin header and checking the response
+# does not reflect it (nor fall back to a bare "*", which would be just as
+# exploitable).
+CORS_HEADERS="$(curl -s -D- -o /dev/null -H 'Origin: https://evil.example' "${BACKEND_URL}" 2>/dev/null || true)"
+if grep -qi '^access-control-allow-origin: *https://evil\.example' <<<"${CORS_HEADERS}"; then
+  bad "backend echoed back 'https://evil.example' in access-control-allow-origin -- " \
+      "ANY web page on this phone can read /settings (the Runpod API key) and spend " \
+      "GPU credits via /execute"
+elif grep -qi '^access-control-allow-origin: *\*' <<<"${CORS_HEADERS}"; then
+  bad "backend answered with access-control-allow-origin: * -- just as exploitable " \
+      "as echoing the foreign origin back (any page can read /settings)"
+else
+  ok "backend did not grant 'https://evil.example' (or '*') access via access-control-allow-origin"
+fi
+
 echo "########## second-instance guard: a second start-backend.sh must refuse to start ##########"
 SECOND_RC=0
 FORGEHUB_NO_TERMUX=1 bash "${START_BACKEND}" >/tmp/start-backend-second.log 2>&1 || SECOND_RC=$?

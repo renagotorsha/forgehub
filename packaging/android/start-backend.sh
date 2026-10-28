@@ -61,6 +61,20 @@
 #                        from 127.0.0.1 on a real phone defeats controller
 #                        ruling 2 -- don't.
 #   FORGEHUB_PORT        Bind port. Default 8484.
+#   FORGEHUB_CORS_ORIGINS  CORS origin the backend will accept. Default
+#                        http://127.0.0.1:${PORT} -- the exact origin that
+#                        serves the GUI, same-origin from the WebView's own
+#                        point of view. Upstream's own default
+#                        (forgehub_backend/config.py:21) is "*", and
+#                        main.py:66-70 pairs that with
+#                        allow_credentials=True -- the combination that lets
+#                        ANY web page the phone's browser opens read
+#                        /settings (the Runpod API key) and spend GPU
+#                        credits via /execute, see the longer note at the
+#                        launch section below. Overridable for anyone who
+#                        genuinely needs a different origin, but never leave
+#                        it unset: an unset value falls through to
+#                        upstream's "*", silently reopening the hole.
 set -euo pipefail
 
 HOST="${FORGEHUB_HOST:-127.0.0.1}"
@@ -184,6 +198,31 @@ else
   echo "NOTE: without it; this is deliberate, not a failure." >&2
 fi
 
+# --- security fix: FORGEHUB_CORS_ORIGINS must never fall through to
+# upstream's default. forgehub_backend/config.py:21 defaults
+# FORGEHUB_CORS_ORIGINS to "*" when unset, and main.py:66-70 wires that
+# straight into CORSMiddleware with allow_credentials=True, allow_methods=
+# ["*"], allow_headers=["*"]. allow_origins="*" + allow_credentials=True is
+# exactly what a browser's CORS check is for preventing: with it, any web
+# page open in any browser on this phone -- not just this app's own
+# WebView -- can fetch http://127.0.0.1:${PORT}/settings with credentials
+# and have the response (including the Runpod API key) handed back to the
+# page's own JavaScript, then POST /execute to spend the owner's GPU
+# credits. A browser would normally block exactly this by same-origin
+# policy; permissive CORS is what defeats that protection, same shape as
+# the Wi-Fi exposure controller ruling 2 above closes for the network
+# layer -- this closes the equivalent hole for the browser layer. The GUI
+# itself is served same-origin by this very backend (src/api.ts defaults
+# to relative URLs; the WebView loads http://127.0.0.1:${PORT} directly),
+# so http://127.0.0.1:${PORT} is the one legitimate origin -- not "*", and
+# not something derived from $HOST, since the GUI is always loaded at the
+# literal loopback address regardless of what this script binds to. This
+# assignment, set unconditionally below, is the ONLY thing standing
+# between upstream's permissive default and this exposure -- do not
+# "simplify" it away by leaving FORGEHUB_CORS_ORIGINS unset.
+CORS_ORIGINS="${FORGEHUB_CORS_ORIGINS:-http://127.0.0.1:${PORT}}"
+echo "-- FORGEHUB_CORS_ORIGINS=${CORS_ORIGINS} (never '*' -- see comment above) --"
+
 # --- controller ruling 3: acquire the wake-lock, honestly ---
 if [[ "${NO_TERMUX}" == "1" ]]; then
   echo "-- FORGEHUB_NO_TERMUX=1 -- skipping termux-wake-lock (NOT acquired; this run" \
@@ -233,10 +272,12 @@ fi
 # notification's Stop button) finds the real process directly instead of a
 # shell wrapping it. The uvicorn invocation itself -- the console-script at
 # .venv/bin/uvicorn, module path, --host/--port -- matches the plan's Step 3
-# verbatim; only the surrounding cd/env/exec is this script's addition, and
-# it is unconditional so both the proot-distro and FORGEHUB_NO_TERMUX=1
+# verbatim; only the surrounding cd/env/exec is this script's addition
+# (FORGEHUB_CORS_ORIGINS=${CORS_ORIGINS} included -- see the security-fix
+# comment above CORS_ORIGINS's assignment for why that one is non-optional),
+# and it is unconditional so both the proot-distro and FORGEHUB_NO_TERMUX=1
 # paths below share one definition instead of two copies that can drift.
-GUEST_CMD="cd \"\${HOME}/ForgeHub\" && FORGEHUB_WORKFLOW_DIR=\"\${HOME}/ForgeHub/workflows\" ${FRONTEND_ENV_ASSIGNMENT}exec .venv/bin/uvicorn forgehub_backend.main:app --host ${HOST} --port ${PORT}"
+GUEST_CMD="cd \"\${HOME}/ForgeHub\" && FORGEHUB_WORKFLOW_DIR=\"\${HOME}/ForgeHub/workflows\" FORGEHUB_CORS_ORIGINS=\"${CORS_ORIGINS}\" ${FRONTEND_ENV_ASSIGNMENT}exec .venv/bin/uvicorn forgehub_backend.main:app --host ${HOST} --port ${PORT}"
 
 if [[ "${NO_TERMUX}" == "1" ]]; then
   echo "-- FORGEHUB_NO_TERMUX=1 -- running the guest command directly (no proot-distro) --"
