@@ -109,6 +109,33 @@ ForgeHub belongs to someone else and keeps moving. Everything here has to surviv
 
 Settled by the answers above, no longer open: the phone pulls our fork with `git clone` inside the proot guest (we control the fork, so this also delivers updates); ffmpeg is installed unconditionally; the toolchain lives on the Linux server.
 
+## Accepted risk: the local API is unauthenticated (owner's decision, 2026-10-28)
+
+On Android, `127.0.0.1` is not a security boundary. Every installed app holding the
+near-universal `INTERNET` permission can reach `http://127.0.0.1:8484`, and the backend has
+no authentication: `GET /settings` returns the **Runpod API key**, and `POST /execute` spends
+the owner's GPU credits. The original reasoning behind the "no authentication is added"
+non-goal — localhost-only, therefore safe — holds on a single-user desktop but is weaker here.
+
+This was raised with the owner and **the owner chose to accept it**: the phone is personal,
+they control what is installed on it, and the alternatives cost either a new auth layer at the
+APK/wrapper seam or permanent rebase conflicts against upstream. Recorded here so that a later
+reader does not mistake it for an oversight and "fix" it without knowing it was weighed.
+
+What is still closed, and must stay closed:
+
+- **The bind is local-only.** `127.0.0.1:8484`, never `0.0.0.0` — otherwise the key would be
+  readable by anything on the same Wi-Fi. Asserted by Task 4's liveness test.
+- **CORS is pinned to the GUI's own origin.** Upstream defaults `FORGEHUB_CORS_ORIGINS` to `*`
+  with `allow_credentials=True` (`config.py:21`, `main.py:66-70`), which would let *any web
+  page* the owner opens read `/settings` cross-origin and exfiltrate the key. The start script
+  sets the exact origin instead, and a liveness assertion fails if a foreign `Origin` is ever
+  echoed back.
+
+Revisiting this is a one-option change: an ASGI token wrapper under `packaging/android/` that
+wraps `forgehub_backend.main:app` without editing upstream, with the APK shell supplying the
+token.
+
 ## Known risks
 
 - Doze suspending the process during long jobs, breaking status polling mid-generation.
