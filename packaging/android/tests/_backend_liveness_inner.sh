@@ -133,7 +133,22 @@ echo "########## security assertion: CORS must not echo back an arbitrary origin
 # does not reflect it (nor fall back to a bare "*", which would be just as
 # exploitable).
 CORS_HEADERS="$(curl -s -D- -o /dev/null -H 'Origin: https://evil.example' "${BACKEND_URL}" 2>/dev/null || true)"
-if grep -qi '^access-control-allow-origin: *https://evil\.example' <<<"${CORS_HEADERS}"; then
+# A response must actually have arrived before the absence of
+# access-control-allow-origin is allowed to count as a pass: curl with
+# `-s ... || true` swallows connection failures silently, so an unreachable
+# backend (crashed, not yet up, a blip) also produces empty/header-less
+# output -- indistinguishable from "CORS correctly refused" unless a status
+# line (e.g. "HTTP/1.1 200") is confirmed present first. Without this guard
+# this is the one assertion in the file that could pass having proven
+# nothing; contrast the main liveness poll above (checks HTTP_CODE == 200)
+# and the post-shutdown check below (a failing curl there IS the desired
+# outcome, which is why it's fine to not require a status line there).
+if ! grep -q $'^HTTP/' <<<"${CORS_HEADERS}"; then
+  bad "no HTTP response line received from ${BACKEND_URL} while probing CORS headers -- " \
+      "curl got nothing back (backend unreachable at that moment?), so the absence of " \
+      "access-control-allow-origin below proves NOTHING about CORS behaviour and must " \
+      "not be treated as a pass"
+elif grep -qi '^access-control-allow-origin: *https://evil\.example' <<<"${CORS_HEADERS}"; then
   bad "backend echoed back 'https://evil.example' in access-control-allow-origin -- " \
       "ANY web page on this phone can read /settings (the Runpod API key) and spend " \
       "GPU credits via /execute"
@@ -141,7 +156,8 @@ elif grep -qi '^access-control-allow-origin: *\*' <<<"${CORS_HEADERS}"; then
   bad "backend answered with access-control-allow-origin: * -- just as exploitable " \
       "as echoing the foreign origin back (any page can read /settings)"
 else
-  ok "backend did not grant 'https://evil.example' (or '*') access via access-control-allow-origin"
+  ok "backend answered (status line present) and did not grant 'https://evil.example' " \
+     "(or '*') access via access-control-allow-origin"
 fi
 
 echo "########## second-instance guard: a second start-backend.sh must refuse to start ##########"
