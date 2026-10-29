@@ -1,0 +1,35 @@
+# Scoped to packaging/android/shell/ only -- the repo root .gitignore
+# belongs to upstream ForgeHub and this project does not touch it (see
+# docs/superpowers/specs/2026-10-27-forgehub-android-design.md, "Living in
+# a fork"). Everything under packaging/android/ is ours, so a local
+# .gitignore here is the correct and sufficient fix.
+
+# Gradle's own local state: build caches, lock files, wrapper download
+# cache. None of this is portable between machines and all of it is
+# reproducible from the committed Gradle config -- it is exactly the kind
+# of noise the controller called out (13 of 18 untracked files here before
+# this commit were .gradle/ cache internals).
+.gradle/
+
+# Build outputs: compiled classes, the APK itself, test reports. Rebuilt
+# from source every time; never has a reason to be committed.
+build/
+*/build/
+
+# Written by Android Studio / the SDK on first sync, points at this
+# machine's absolute SDK path -- meaningless (and wrong) on any other
+# machine or CI runner.
+local.properties
+
+# IDE project state.
+.idea/
+*.iml
+
+# Controller ruling 4 backstop: the signing keystore must never enter the
+# working tree at all (it lives outside the repo, path from an env var --
+# see make-release-keystore.sh and app/build.gradle.kts's signingConfigs).
+# These patterns exist only in case one is ever created inside this
+# directory by mistake; the real control is "don't put one here".
+*.jks
+*.keystore
+*.p12
