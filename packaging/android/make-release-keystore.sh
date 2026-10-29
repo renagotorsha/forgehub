@@ -97,11 +97,19 @@ fi
 mkdir -p "$(dirname "${KEYSTORE}")"
 
 echo "== generating ${KEYSTORE} (alias: ${ALIAS}) =="
+# -storepass:env / -keypass:env, not -storepass/-keypass with the value
+# inline: a plain -storepass/-keypass argument lands in this process's argv,
+# which is world-readable on this host via /proc/<pid>/cmdline and `ps` for
+# as long as keytool is running -- this box also runs an unrelated ~60
+# container Docker stack, so other processes genuinely do run here at the
+# same time. The :env form passes only the environment variable's NAME on
+# the command line; keytool reads the actual secret from that variable
+# in its own process, where argv-watching can't see it.
 "${KEYTOOL}" -genkeypair \
   -keystore "${KEYSTORE}" \
-  -storepass "${FORGEHUB_RELEASE_KEYSTORE_PASSWORD}" \
+  -storepass:env FORGEHUB_RELEASE_KEYSTORE_PASSWORD \
   -alias "${ALIAS}" \
-  -keypass "${FORGEHUB_RELEASE_KEY_PASSWORD}" \
+  -keypass:env FORGEHUB_RELEASE_KEY_PASSWORD \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -dname "CN=ForgeHub Shell, OU=Personal, O=Personal, L=Unknown, ST=Unknown, C=XX"
 
