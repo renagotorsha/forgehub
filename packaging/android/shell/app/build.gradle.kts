@@ -7,6 +7,43 @@ android {
     namespace = "app.forgehub.shell"
     compileSdk = 34
 
+    // Controller ruling 4: the keystore itself lives OUTSIDE this repo
+    // entirely (see ../make-release-keystore.sh and task-5-report.md for
+    // exactly where it is on this build host) -- this only reads a path
+    // and three credentials from the environment, never a literal. Left
+    // null when FORGEHUB_RELEASE_KEYSTORE is unset so that unrelated tasks
+    // (":app:testDebugUnitTest", ":app:assembleDebug") keep working without
+    // a keystore on hand; a release build with no signing config simply
+    // comes out unsigned rather than failing the whole module's
+    // configuration.
+    val releaseKeystorePath: String? = System.getenv("FORGEHUB_RELEASE_KEYSTORE")
+
+    signingConfigs {
+        create("release") {
+            if (releaseKeystorePath != null) {
+                storeFile = file(releaseKeystorePath)
+                // FORGEHUB_RELEASE_KEYSTORE being set is this build's
+                // signal that a real signed release is actually wanted --
+                // from here on, a missing credential is a loud
+                // configuration failure, not a silent fall-through to an
+                // unsigned APK that LOOKS like a release build.
+                storePassword =
+                    System.getenv("FORGEHUB_RELEASE_KEYSTORE_PASSWORD")
+                        ?: error(
+                            "FORGEHUB_RELEASE_KEYSTORE is set but " +
+                                "FORGEHUB_RELEASE_KEYSTORE_PASSWORD is not -- refusing to " +
+                                "build a release APK with half a signing config.",
+                        )
+                keyAlias =
+                    System.getenv("FORGEHUB_RELEASE_KEY_ALIAS")
+                        ?: error("FORGEHUB_RELEASE_KEYSTORE is set but FORGEHUB_RELEASE_KEY_ALIAS is not.")
+                keyPassword =
+                    System.getenv("FORGEHUB_RELEASE_KEY_PASSWORD")
+                        ?: error("FORGEHUB_RELEASE_KEYSTORE is set but FORGEHUB_RELEASE_KEY_PASSWORD is not.")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "app.forgehub.shell"
         // minSdk 26: this app's only launcher icon is the adaptive icon
@@ -25,6 +62,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // else: stays unsigned (see releaseKeystorePath's comment above).
         }
     }
 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backing storage for the FileProvider that hands camera captures to the
+  WebView's file chooser (see MainActivity.createCameraCaptureUri()).
+  cache-path, not external-path: these are scratch files with the OS's own
+  cache lifetime, not the real copy of anything; the real copy is
+  whatever the frontend does with the upload once the WebView hands it
+  over (POST /upload), not this directory.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="camera_captures" path="camera-captures/" />
+</paths>

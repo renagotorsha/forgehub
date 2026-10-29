@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Controller ruling 5: cleartext traffic is permitted for 127.0.0.1 ONLY,
+  the loopback address start-backend.sh binds to
+  (packaging/android/start-backend.sh's HOST default; see
+  BackendProbe.kt's HOST/BACKEND_ORIGIN, which this must keep matching).
+  base-config below denies cleartext for every other destination this app
+  might ever be pointed at, so AndroidManifest.xml's <application> has no
+  android:usesCleartextTraffic="true"; that attribute is ignored once a
+  networkSecurityConfig is present, and setting it anyway would be a dead
+  line inviting someone to believe it still does something, or to "clean
+  it up" by relying on it instead of this file the next time something
+  changes. includeSubdomains="false" is deliberate too: 127.0.0.1 is an IP
+  literal, not a domain with subdomains, and leaving this true would be
+  meaningless at best.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

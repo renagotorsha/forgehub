@@ -1,4 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:label="ForgeHub" />
+
+    <!-- Loopback sockets still go through Android's normal permission-
+         gated network stack, so this is required even though the WebView
+         only ever talks to 127.0.0.1 (see network_security_config.xml) and
+         nothing here ever reaches off-device. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="ForgeHub"
+        android:networkSecurityConfig="@xml/network_security_config">
+        <!--
+          android:usesCleartextTraffic is deliberately absent here.
+          Controller ruling 5: cleartext must be scoped to 127.0.0.1 only.
+          network_security_config.xml's domain-config already does exactly
+          that, and once a networkSecurityConfig is present the platform
+          uses it, not this attribute, to decide cleartext policy. Adding
+          android:usesCleartextTraffic="true" here would do nothing by
+          itself, but it reads like a global opt-in and is exactly the kind
+          of line a future edit could "fix" by actually wiring it up,
+          silently widening cleartext to every destination instead of just
+          the loopback backend.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="ForgeHub"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Backs MainActivity's camera-capture file chooser (onShowFileChooser). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
 </manifest>
