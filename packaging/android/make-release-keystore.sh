@@ -17,7 +17,8 @@
 # recoverable annoyance but overwriting by accident is not.
 #
 # Required environment: FORGEHUB_RELEASE_KEYSTORE_PASSWORD,
-#                        FORGEHUB_RELEASE_KEY_PASSWORD.
+#                        FORGEHUB_RELEASE_KEY_PASSWORD (must be IDENTICAL to
+#                        the keystore password -- see the check below for why).
 # Optional environment: FORGEHUB_RELEASE_KEYSTORE (default:
 #                        "${HOME}/forgehub-release.keystore" -- a sibling
 #                        of, never inside, this checkout),
@@ -50,6 +51,26 @@ if [[ -z "${FORGEHUB_RELEASE_KEYSTORE_PASSWORD:-}" ]]; then
 fi
 if [[ -z "${FORGEHUB_RELEASE_KEY_PASSWORD:-}" ]]; then
   echo "FATAL: FORGEHUB_RELEASE_KEY_PASSWORD is not set." >&2
+  exit 1
+fi
+# keytool's default keystore type is PKCS12 (JDK 17's default, and this
+# script does not override -storetype), and PKCS12 has no concept of a
+# per-key password distinct from the store password: `keytool -genkeypair`
+# silently IGNORES a differing -keypass and prints only a one-line warning
+# ("Different store and key passwords not supported for PKCS12 KeyStores"),
+# then uses the store password for the key entry anyway. Observed directly
+# running this script, not a guess from documentation. Accepting two
+# different values here would mean the keystore quietly ends up with a
+# key password neither variable actually holds -- a mismatch nobody would
+# notice until a much later `apksigner` or Gradle signing failure pointed
+# at the wrong cause entirely. Refusing here, loudly, instead.
+if [[ "${FORGEHUB_RELEASE_KEY_PASSWORD}" != "${FORGEHUB_RELEASE_KEYSTORE_PASSWORD}" ]]; then
+  echo "FATAL: FORGEHUB_RELEASE_KEY_PASSWORD differs from" >&2
+  echo "FATAL: FORGEHUB_RELEASE_KEYSTORE_PASSWORD. PKCS12 keystores (this script's" >&2
+  echo "FATAL: default) force them to be the same value -- keytool would silently" >&2
+  echo "FATAL: ignore your key password and use the store password instead, leaving" >&2
+  echo "FATAL: the keystore's real key password different from what you think you" >&2
+  echo "FATAL: set. Set both environment variables to the SAME value." >&2
   exit 1
 fi
 
