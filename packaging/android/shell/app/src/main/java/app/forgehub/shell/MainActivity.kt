@@ -225,11 +225,51 @@ class MainActivity : AppCompatActivity() {
         view.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            allowFileAccess = true
+            // Neither is needed for anything this app does: the frontend's
+            // upload picker goes through WebChromeClient.onShowFileChooser
+            // plus a system Intent (see onShowFileChooser below), which is
+            // governed by the OS's normal document-picker/FileProvider
+            // permissions, not by these two settings -- those two only
+            // control whether the WebView may itself *load* file:/content:
+            // URLs as navigation targets. Leaving them on would let a
+            // compromised or phished page inside the WebView read local
+            // files via a file:/content: URL; shouldOverrideUrlLoading
+            // below also blocks those schemes outright as a second layer.
+            allowFileAccess = false
+            allowContentAccess = false
         }
 
         view.webViewClient =
             object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView,
+                    request: WebResourceRequest,
+                ): Boolean {
+                    // Enforces the same single-origin boundary
+                    // start-backend.sh's CORS pin enforces on the fetch/XHR
+                    // side (see BackendProbe.BACKEND_ORIGIN's comment) --
+                    // here, for navigation. Without this, any link or
+                    // redirect inside the page could carry the owner to a
+                    // phishing page asking for the Runpod API key, rendered
+                    // inside the window they trust as ForgeHub.
+                    return when (NavigationPolicy.decide(request.url.toString())) {
+                        // false = "didn't override it" = the WebView proceeds
+                        // with its own normal load, exactly as if this
+                        // override didn't exist. This is also what keeps
+                        // the initial showWebView() -> loadUrl(BACKEND_ORIGIN)
+                        // call working: that origin always decides to
+                        // LoadInWebView here.
+                        NavigationPolicy.Decision.LoadInWebView -> false
+                        NavigationPolicy.Decision.OpenExternally -> {
+                            openExternally(request.url)
+                            true
+                        }
+                        // true = "overridden, do nothing" -- the WebView's
+                        // current page stays exactly where it was.
+                        NavigationPolicy.Decision.Block -> true
+                    }
+                }
+
                 override fun onReceivedError(
                     view: WebView,
                     request: WebResourceRequest,
@@ -269,6 +309,21 @@ class MainActivity : AppCompatActivity() {
 
         view.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             downloadToDownloads(url, userAgent, contentDisposition, mimeType)
+        }
+    }
+
+    /**
+     * Hands an http/https URL that is NOT the backend's own origin to whatever app the
+     * OS resolves ACTION_VIEW to (normally the system browser), instead of ever
+     * rendering it inside this app's WebView. If nothing can handle it (no browser
+     * installed), the navigation is simply dropped -- there is no sane in-app fallback
+     * for a URL this app has already decided not to show itself.
+     */
+    private fun openExternally(uri: Uri) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: ActivityNotFoundException) {
+            // Nothing installed can view it -- dropped, not loaded in the WebView.
         }
     }
 
