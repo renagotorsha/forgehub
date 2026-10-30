@@ -27,12 +27,16 @@ import org.junit.Test
  * java.base, which is always available, and is just as faithful a stand-in
  * for "nothing listening yet, then something listening and answering 200".
  *
- * The stub binds to BackendProbe.HOST/PORT -- the exact address await()
- * polls by default -- not an arbitrary free port, because await() takes
- * only a timeout in the brief's prescribed call shape
- * (`BackendProbe.await(timeoutMs = ...)`); there is no URL parameter to
- * redirect it elsewhere in these tests. Confirmed free on this host before
- * relying on it (`ss -ltnp | grep 8484`): nothing else here uses it.
+ * The stub binds to an OS-assigned ephemeral port (`ServerSocket(0, ...)`),
+ * never BackendProbe.PORT (8484) -- that is the production backend's real
+ * port, and this is the exact kind of host (the owner's own phone, or any
+ * dev box) where something may genuinely be listening there already. A
+ * hardcoded 8484 here would make these tests non-hermetic: a real backend
+ * on 8484 would make returnsFalseWhenBackendNeverAppears see a genuine 200
+ * and fail, while returnsTrueWhenBackendAppearsLate's own bind would throw
+ * BindException. BackendProbe.await() takes an explicit `url` parameter
+ * precisely so callers are never forced onto the default CONFIG_URL/PORT --
+ * every call below passes the stub's actual ephemeral port through it.
  */
 class BackendProbeTest {
 
@@ -57,16 +61,17 @@ class BackendProbeTest {
     fun returnsTrueWhenBackendAppearsLate() {
         // The normal cold-start case this task exists for: the owner opens
         // the app before Termux has started uvicorn. Nothing listens on
-        // the port at all for the first two seconds -- a real connection
+        // this port at all for the first two seconds -- a real connection
         // refusal, not a slow or erroring response -- then the stub starts
         // answering 200 on /config. await() must catch that within its
         // 10s budget.
-        startStubAfter(delayMs = 2_000)
+        val port = reserveFreePort()
+        startStubAfter(port = port, delayMs = 2_000)
 
         assertTrue(
             "await() must return true once /config starts answering, even if that" +
                 " happens partway through the timeout window",
-            BackendProbe.await(timeoutMs = 10_000),
+            BackendProbe.await(timeoutMs = 10_000, url = configUrl(port)),
         )
     }
 
@@ -75,17 +80,33 @@ class BackendProbeTest {
         // Nothing is ever started here -- every attempt inside the window
         // hits connection-refused. await() must resolve to a plain false,
         // not throw, and not block past its own timeout budget.
+        val port = reserveFreePort()
         assertFalse(
             "await() must return false, not throw, when nothing ever answers",
-            BackendProbe.await(timeoutMs = 1_000),
+            BackendProbe.await(timeoutMs = 1_000, url = configUrl(port)),
         )
     }
 
-    /** Starts a stub HTTP server answering 200 on /config, after [delayMs] of silence. */
-    private fun startStubAfter(delayMs: Long) {
+    private fun configUrl(port: Int): String = "http://${BackendProbe.HOST}:$port/config"
+
+    /**
+     * Binds to an OS-assigned ephemeral port, reads the port number back,
+     * then immediately closes the socket -- freeing it for [startStubAfter]
+     * to rebind by exact number later, or for [returnsFalseWhenBackendNeverAppears]
+     * to simply never rebind. The gap between this close and any later
+     * rebind is a theoretical race (another process could grab the same
+     * port), but it is vanishingly unlikely in a short-lived test process
+     * and is the standard way to get a guaranteed-free port number without
+     * keeping a socket open the whole time.
+     */
+    private fun reserveFreePort(): Int =
+        ServerSocket(0, 0, InetAddress.getByName(BackendProbe.HOST)).use { it.localPort }
+
+    /** Starts a stub HTTP server on [port], answering 200 on /config, after [delayMs] of silence. */
+    private fun startStubAfter(port: Int, delayMs: Long) {
         val thread = Thread {
             Thread.sleep(delayMs)
-            val socket = ServerSocket(BackendProbe.PORT, 0, InetAddress.getByName(BackendProbe.HOST))
+            val socket = ServerSocket(port, 0, InetAddress.getByName(BackendProbe.HOST))
             // Assigned before the accept loop starts: the probe thread can
             // connect the instant the socket is bound, and tearDown() must
             // be able to see this field by then.
