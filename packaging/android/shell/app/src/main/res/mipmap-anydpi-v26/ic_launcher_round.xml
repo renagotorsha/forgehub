@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Identical content to ic_launcher.xml. A round launcher icon is not a
+  different image, just a different mask applied by the OS/launcher on top
+  of the same adaptive-icon layers; so android:roundIcon in the manifest
+  points here rather than duplicating the vector drawables under a new name.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

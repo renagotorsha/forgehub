@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon (API 26+ only, hence mipmap-anydpi-v26; this is the
+  resource build.gradle.kts's minSdk=26 comment refers to). Both layers are
+  vector drawables defined in res/drawable/, not raster PNGs, so there is
+  no density-specific mipmap-*dpi/ set to also maintain.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

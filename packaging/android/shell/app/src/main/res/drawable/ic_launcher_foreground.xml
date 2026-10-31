@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon foreground layer: a plain "F" monogram for ForgeHub, built
+  as three solid rectangles (vertical bar + two horizontal bars) so the
+  whole shape is expressible as straight-line pathData; no curves, no
+  external art, no image tooling, just a vector drawable.
+
+  Adaptive icons get masked into different shapes (circle, squircle,
+  rounded square, teardrop) depending on the launcher, and only the central
+  66dp of the 108dp canvas is guaranteed visible across all of them. The
+  monogram is kept inside x:[36,72] y:[30,78]; well within that 66dp safe
+  zone (21..87 on both axes); so it survives any mask without clipping.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,30h12v48h-12z M36,30h36v12h-36z M36,48h28v12h-28z" />
+</vector>
