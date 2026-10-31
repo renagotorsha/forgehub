@@ -87,4 +87,45 @@ class NavigationPolicyTest {
             NavigationPolicy.decide("not a url at all"),
         )
     }
+
+    // The following three cases lock in a hand-verified review finding (not re-derived
+    // here): java.net.URL parses each of these in a way that keeps NavigationPolicy safe
+    // today, but only because of how URL itself behaves -- a future swap to
+    // android.net.Uri or a hand-rolled parser could silently reopen any of them. Each
+    // assertion is on the resulting Decision, not merely that parsing didn't throw.
+
+    @Test
+    fun routesUserinfoHostTrickOutExternallyNotToTheBackend() {
+        // "http://127.0.0.1@evil.com/" -- java.net.URL reads this as
+        // userInfo="127.0.0.1", host="evil.com", so it must NOT be treated as the
+        // backend origin just because "127.0.0.1" appears before the "@". A parser
+        // that instead keyed off the substring before "@" would wrongly load this
+        // inside the trusted WebView.
+        assertEquals(
+            NavigationPolicy.Decision.OpenExternally,
+            NavigationPolicy.decide("http://127.0.0.1@evil.com/"),
+        )
+    }
+
+    @Test
+    fun routesIpv6LoopbackOutExternallyNotToTheBackend() {
+        // "http://[::1]:8484/" is IPv6 loopback, a distinct host string from the
+        // backend's "127.0.0.1" -- same port, different host, so it must not match.
+        assertEquals(
+            NavigationPolicy.Decision.OpenExternally,
+            NavigationPolicy.decide("http://[::1]:8484/"),
+        )
+    }
+
+    @Test
+    fun loadsBackendOriginRegardlessOfSchemeCase() {
+        // "HTTP://127.0.0.1:8484/" -- java.net.URL lowercases the scheme it returns
+        // from getProtocol(), so an uppercase-scheme spelling of the exact backend
+        // origin must still match and load in the WebView, not get treated as some
+        // other/unknown scheme.
+        assertEquals(
+            NavigationPolicy.Decision.LoadInWebView,
+            NavigationPolicy.decide("HTTP://${BackendProbe.HOST}:${BackendProbe.PORT}/"),
+        )
+    }
 }
