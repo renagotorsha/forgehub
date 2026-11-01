@@ -125,7 +125,10 @@ export default function OutputsGallery({ outputs, open, onClose, canReference, o
   }
 
   return (
-    <div className="flex w-[400px] shrink-0 flex-col border-l border-border bg-bg-elev/70 backdrop-blur-md">
+    <div
+      data-testid="gallery-panel"
+      className="fixed inset-0 z-30 flex w-full shrink-0 flex-col border-l border-border bg-bg-elev backdrop-blur-md md:static md:inset-auto md:z-auto md:w-[400px] md:bg-bg-elev/70"
+    >
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight">
           <Images size={14} className="text-accent" /> {t.outputsTitle}

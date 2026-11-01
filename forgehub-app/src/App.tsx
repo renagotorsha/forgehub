@@ -1,4 +1,4 @@
-import { Download, Images, MessageSquare, Music, Play, Settings, Square, X } from "lucide-react";
+import { Download, Images, MessageSquare, Menu, Music, Play, Settings, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ForgeHubClient, ForgehubBridge, OutputFile, UpdateInfo, Workflow } from "./api";
 import ChatDrawer from "./components/ChatDrawer";
@@ -7,6 +7,7 @@ import OutputLightbox from "./components/OutputLightbox";
 import RecipeForm from "./components/RecipeForm";
 import SettingsDialog from "./components/SettingsDialog";
 import Sidebar from "./components/Sidebar";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { LangContext, Language, format, getStoredLang, storeLang, useT } from "./i18n";
 
 export default function App() {
@@ -16,6 +17,8 @@ export default function App() {
     storeLang(l);
   };
   const t = useT();
+  const isMobile = useIsMobile();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [backendUrl] = useState(
     () =>
@@ -157,6 +160,46 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [jobsActive]);
 
+  // Android suspends the WebView's timers when the screen goes off (Doze),
+  // so an in-flight setInterval poll silently stops. Re-check every active
+  // job as soon as the tab becomes visible again, so the owner doesn't
+  // unlock the phone to a job that looks stuck forever.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      for (const jobId of Object.keys(jobs)) {
+        client
+          .getExecutionStatus(jobId)
+          .then((st) => {
+            if (st.status === "running") {
+              setJobs((prev) =>
+                prev[jobId] ? { ...prev, [jobId]: { ...prev[jobId], state: st.remote_status ?? "RUNNING" } } : prev,
+              );
+              return;
+            }
+            window.clearInterval(pollers.current[jobId]);
+            setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
+            if (st.status === "success") {
+              setOutputs((prev) => [...st.outputs, ...prev]);
+              setPreviewKey(null);
+              if (st.texts && Object.keys(st.texts).length) setJobTexts(st.texts);
+              playDone();
+            } else if (st.status !== "cancelled") {
+              setError(st.error || "Esecuzione fallita");
+            }
+          })
+          .catch((e) => {
+            window.clearInterval(pollers.current[jobId]);
+            setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
+            setError(String(e));
+          });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, client]);
+
   const startPolling = (jobId: string) => {
     setJobs((prev) => ({ ...prev, [jobId]: { state: "IN_QUEUE", startedAt: Date.now() } }));
     pollers.current[jobId] = window.setInterval(async () => {
@@ -244,27 +287,56 @@ const execute = async () => {
         selectedId={selectedId}
         onSelect={setSelectedId}
         endpointId={endpointId}
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-border bg-panel/70 px-6 py-3.5 backdrop-blur-md">
-          <div className="min-w-0">
-            <div className="truncate text-[15px] font-bold tracking-tight">
-              {workflow ? workflow.name : "Select a workflow"}
+        <header className="relative z-40 flex items-center justify-between border-b border-border bg-panel/70 px-6 py-3.5 backdrop-blur-md">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              data-testid="sidebar-trigger"
+              onClick={() => setSidebarOpen(true)}
+              title="Menu"
+              className="shrink-0 rounded-lg border border-border bg-panel p-2 text-muted transition-colors hover:border-border-strong hover:text-text md:hidden"
+            >
+              <Menu size={16} />
+            </button>
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-bold tracking-tight">
+                {workflow ? workflow.name : "Select a workflow"}
+              </div>
+              {workflow?.description && (
+                <div className="mt-0.5 truncate text-[12px] text-muted">{workflow.description}</div>
+              )}
             </div>
-            {workflow?.description && (
-              <div className="mt-0.5 truncate text-[12px] text-muted">{workflow.description}</div>
-            )}
           </div>
           <div className="flex items-center gap-2">
             {([
-              { icon: <Images size={15} />, title: t.outputsTitle, active: galleryOpen, onClick: () => setGalleryOpen((o) => !o), badge: outputs.length },
-              { icon: <MessageSquare size={15} />, title: t.promptAssist, active: chatOpen, onClick: () => setChatOpen((o) => !o) },
-              { icon: <Settings size={15} />, title: t.settings, active: settingsOpen, onClick: () => setSettingsOpen(true) },
+              {
+                icon: <Images size={15} />, title: t.outputsTitle, active: galleryOpen, badge: outputs.length,
+                testid: "gallery-trigger",
+                onClick: () => setGalleryOpen((o) => {
+                  const next = !o;
+                  if (next && isMobile) setChatOpen(false);
+                  return next;
+                }),
+              },
+              {
+                icon: <MessageSquare size={15} />, title: t.promptAssist, active: chatOpen,
+                testid: "chat-trigger",
+                onClick: () => setChatOpen((o) => {
+                  const next = !o;
+                  if (next && isMobile) setGalleryOpen(false);
+                  return next;
+                }),
+              },
+              { icon: <Settings size={15} />, title: t.settings, active: settingsOpen, testid: "settings-trigger", onClick: () => setSettingsOpen(true) },
             ]).map((b) => (
               <button
                 key={b.title}
+                data-testid={b.testid}
                 onClick={b.onClick}
                 title={b.title}
                 className={`relative rounded-lg border p-2 transition-all duration-150 ${
@@ -282,6 +354,7 @@ const execute = async () => {
               </button>
             ))}
             <button
+              data-testid="execute-button"
               onClick={execute}
               disabled={!workflow}
               className="ml-1 flex items-center gap-2 rounded-lg bg-gradient-to-b from-accent-hover to-accent px-5 py-2 text-[13px] font-bold text-white shadow-[0_1px_0_rgb(255_255_255/0.18)_inset,0_4px_18px_rgb(124_92_255/0.35)] transition-all duration-150 hover:shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_6px_26px_rgb(124_92_255/0.5)] hover:brightness-110 active:scale-[0.98] disabled:cursor-default disabled:opacity-50 disabled:shadow-none"
@@ -357,7 +430,7 @@ const execute = async () => {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto flex max-w-[1440px] items-start gap-6">
             {/* Latest output hero + recent filmstrip — fills the left gutter */}
-            <aside className="sticky top-0 hidden w-[460px] shrink-0 xl:block 2xl:w-[540px]">
+            <aside data-testid="preview-column" className="sticky top-0 hidden w-[460px] shrink-0 xl:block 2xl:w-[540px]">
               <div className="rounded-xl border border-border bg-panel p-3 shadow-[var(--shadow-panel)]">
                 <div className="mb-2 flex items-center justify-between px-1">
                   <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">

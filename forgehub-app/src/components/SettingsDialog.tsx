@@ -139,8 +139,8 @@ export default function SettingsDialog({ client, open, onClose, onSaved }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-[440px] overflow-y-auto rounded-2xl border border-border-strong bg-panel p-6 shadow-[var(--shadow-pop)]"
-        style={{ animation: "fh-fade-up .2s ease-out" }}
+        data-testid="settings-panel"
+        className="h-full w-full max-h-none max-w-none overflow-y-auto rounded-none border-0 bg-panel p-6 shadow-none sm:h-auto sm:max-h-[90vh] sm:w-[440px] sm:max-w-full sm:rounded-2xl sm:border sm:border-border-strong sm:shadow-[var(--shadow-pop)] sm:[animation:fh-fade-up_.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">

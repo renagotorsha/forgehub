@@ -361,7 +361,7 @@ export default function RecipeForm({ client, parameters, values, setValue, image
     const pv = values[parentKey];
     if (!kids.length || (pv !== "on" && pv !== true)) return null;
     return (
-      <div className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-bg-elev/30 p-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-lg border border-border/60 bg-bg-elev/30 p-3">
         {kids.map((k) => (
           <div key={k.key} className={isCompact(k) ? "" : "col-span-2"}>
             <Label>{k.label || k.key}</Label>
@@ -383,7 +383,7 @@ export default function RecipeForm({ client, parameters, values, setValue, image
           toggles.push(params[++i]);
         }
         rows.push(
-          <div key={p.key} className={`grid gap-3 ${toggles.length > 1 ? "grid-cols-2" : ""}`}>
+          <div key={p.key} className={`grid gap-3 ${toggles.length > 1 ? "grid-cols-1 sm:grid-cols-2" : ""}`}>
             {toggles.map((t) => (
               <div key={t.key} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-bg-elev/40 px-3 py-2.5">
                 <span className="text-[12px] text-muted leading-tight">{t.label || t.key}</span>
@@ -404,7 +404,7 @@ export default function RecipeForm({ client, parameters, values, setValue, image
           group.push(params[++i]);
         }
         rows.push(
-          <div key={p.key} className={`grid gap-3 ${group.length > 1 ? "grid-cols-2" : ""}`}>
+          <div key={p.key} className={`grid gap-3 ${group.length > 1 ? "grid-cols-1 sm:grid-cols-2" : ""}`}>
             {group.map((g) => (
               <div key={g.key}>
                 <Label>{g.label || g.key}</Label>

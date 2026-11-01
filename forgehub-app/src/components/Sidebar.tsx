@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Clapperboard, Image as ImageIcon, Package, Search, Sparkles, Video } from "lucide-react";
+import { Clapperboard, Image as ImageIcon, Package, Search, Sparkles, Video, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Workflow } from "../api";
 import { useT } from "../i18n";
@@ -17,9 +17,13 @@ interface Props {
   selectedId: string;
   onSelect: (id: string) => void;
   endpointId: string;
+  // Mobile drawer state — optional, so existing call sites render exactly as
+  // before (docked sidebar, no drawer behavior) when they don't pass these.
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ workflows, selectedId, onSelect, endpointId }: Props) {
+export default function Sidebar({ workflows, selectedId, onSelect, endpointId, mobileOpen = false, onMobileClose }: Props) {
   const t = useT();
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
@@ -37,7 +41,13 @@ export default function Sidebar({ workflows, selectedId, onSelect, endpointId }:
   }, [filtered]);
 
   return (
-    <aside className="flex w-[290px] shrink-0 flex-col border-r border-border bg-bg-elev/70">
+    <aside
+      data-testid="sidebar"
+      className={clsx(
+        "fixed inset-y-0 left-0 z-50 flex w-[290px] max-w-[85vw] shrink-0 flex-col border-r border-border bg-bg-elev shadow-[var(--shadow-pop)] md:static md:z-auto md:w-[290px] md:max-w-none md:bg-bg-elev/70 md:shadow-none",
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+      )}
+    >
       <div className="border-b border-border px-4 py-4">
         <div className="flex items-center gap-2.5">
           <img
@@ -51,6 +61,16 @@ export default function Sidebar({ workflows, selectedId, onSelect, endpointId }:
             </div>
             <div className="text-[11px] tracking-wide text-faint">{t.tagline}</div>
           </div>
+          {onMobileClose && (
+            <button
+              data-testid="sidebar-close"
+              onClick={onMobileClose}
+              title="Close"
+              className="ml-auto rounded-md p-1.5 text-muted transition-colors hover:bg-panel-hover hover:text-text md:hidden"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
         <div className="relative mt-4">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
@@ -76,6 +96,8 @@ export default function Sidebar({ workflows, selectedId, onSelect, endpointId }:
             {list.map((w) => (
               <button
                 key={w.id}
+                data-testid="workflow-item"
+                data-workflow-id={w.id}
                 onClick={() => onSelect(w.id)}
                 className={clsx(
                   "relative mb-0.5 w-full rounded-lg px-3 py-2 text-left transition-all duration-150",
