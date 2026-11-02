@@ -129,6 +129,20 @@ test.describe("mobile viewport (390x844)", () => {
     // can't express "close a different piece of state."
     await expect(page.getByTestId("gallery-panel")).toBeHidden();
   });
+
+  test("opening the gallery sheet closes an open chat sheet (mobile-only exclusivity)", async ({ page }) => {
+    await waitForAppReady(page);
+    await page.getByTestId("chat-trigger").click();
+    await expect(page.getByTestId("chat-panel")).toBeVisible();
+
+    await page.getByTestId("gallery-trigger").click();
+    await expect(page.getByTestId("gallery-panel")).toBeVisible();
+    // Mirrors the case above: the same isMobile branch exists in the
+    // gallery trigger's onClick. Assert the decision — that chat becomes
+    // hidden as a result of opening the gallery — not merely that the
+    // gallery appeared.
+    await expect(page.getByTestId("chat-panel")).toBeHidden();
+  });
 });
 
 test.describe("desktop reference (1920x1080)", () => {
