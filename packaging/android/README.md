@@ -150,20 +150,29 @@ both), the guest-side clone of this fork, a venv, and the dependency set
 pinned in `requirements.lock.txt`.
 
 **This is also the update command.** Both scripts are idempotent, and
-`install.sh` now starts by running `git pull --ff-only` on the Termux-side
-checkout it is itself running from, before doing anything else — so
-re-running the exact same `bash packaging/android/install.sh` command later
-updates *both* checkouts (the Termux-side one here, and the guest-side one
-via `guest-provision.sh`'s own `git pull`) in one step, without re-cloning
-or touching an existing `data/settings.json` (which may hold the owner's
+`install.sh` starts by running `git pull --ff-only` on the Termux-side
+checkout it is itself running from, before doing anything else — so updates
+pull both checkouts (the Termux-side one here, and the guest-side one via
+`guest-provision.sh`'s own `git pull`) in one step, without re-cloning or
+touching an existing `data/settings.json` (which may hold the owner's
 Runpod API key). `start-backend.sh` and the Termux:Boot entry point
 (`boot/start-forgehub.sh`) read the Termux-side checkout live, so this pull
-is what keeps them from drifting from the fork after the first install.
+keeps them from drifting from the fork after the first install.
 
-`FORGEHUB_REPO_URL` is **required** by `install.sh` too — it is what the
-guest-side clone is made from. Optional `FORGEHUB_REPO_BRANCH` (default
-`android`) selects which branch to track; both should normally match
-whatever you exported in the Bootstrap step above.
+To update later, open a fresh Termux session and run the following
+(environment variables do not persist between sessions):
+
+```bash
+cd ~/ForgeHub
+export FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git
+export FORGEHUB_REPO_BRANCH=android                                # optional
+
+bash packaging/android/install.sh
+```
+
+`FORGEHUB_REPO_URL` is **required** each time — it specifies the remote for
+both the Termux-side pull and the guest-side clone. Optional
+`FORGEHUB_REPO_BRANCH` (default `android`) selects which branch to track.
 
 The built frontend is already committed at `packaging/android/dist/` (see
 above), so provisioning normally finds it. If it is ever missing on some
