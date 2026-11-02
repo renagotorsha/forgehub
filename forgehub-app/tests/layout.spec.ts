@@ -96,14 +96,31 @@ test.describe("mobile viewport (390x844)", () => {
     expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
   });
 
-  test("OutputsGallery occupies the full viewport when opened", async ({ page }) => {
+  test("OutputsGallery occupies the full viewport below the header when opened", async ({ page }) => {
     await waitForAppReady(page);
+    // Measured, not hardcoded — mirrors how the component itself positions
+    // the sheet (var(--fh-header-h), set from the header's real rendered
+    // height). The sheet deliberately stops short of the header now (see
+    // the header/sheet mutual-occlusion fix below): it covers the rest of
+    // the viewport, not the header's own strip.
+    const headerBox = (await page.locator("header").boundingBox())!;
+    const headerBottom = headerBox.y + headerBox.height;
+
     await page.getByTestId("gallery-trigger").click();
     const panel = page.getByTestId("gallery-panel");
     await expect(panel).toBeVisible();
-    const box = await panel.boundingBox();
+    const box = (await panel.boundingBox())!;
     const viewport = page.viewportSize()!;
-    expect(box).toMatchObject({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+    // CSS `top: var(--fh-header-h)` is set from the header's integer
+    // offsetHeight, while boundingBox() comes from getBoundingClientRect(),
+    // which can report fractional sub-pixel values — a <1px gap here is a
+    // rounding artifact of comparing those two APIs, not a layout bug.
+    expect(box.x).toBe(0);
+    expect(box.y).toBeGreaterThanOrEqual(headerBottom - 1);
+    expect(box.y).toBeLessThanOrEqual(headerBottom + 1);
+    expect(box.width).toBe(viewport.width);
+    expect(box.y + box.height).toBeGreaterThanOrEqual(viewport.height - 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
   });
 
   test("SettingsDialog occupies the full viewport when opened", async ({ page }) => {
@@ -121,18 +138,12 @@ test.describe("mobile viewport (390x844)", () => {
     await page.getByTestId("gallery-trigger").click();
     await expect(page.getByTestId("gallery-panel")).toBeVisible();
 
-    // Since the header-vs-sheet z-index fix (gallery/chat panels now paint
-    // above the header, so the panel's own close button is reachable
-    // instead of hidden under it — see the final-review item this closes),
-    // the header's OTHER trigger sits underneath the open sheet and a real
-    // pointer click on it is correctly blocked by the sheet intercepting
-    // the hit-test, same as a finger on the phone would be. Keyboard
-    // activation (focus + Enter) is not subject to that hit-test — it
-    // fires the button's click handler directly, exactly as it would for a
-    // keyboard/screen-reader user tabbing to it — so it's what's left to
-    // exercise the isMobile exclusivity branch in this trigger's onClick.
-    await page.getByTestId("chat-trigger").focus();
-    await page.getByTestId("chat-trigger").press("Enter");
+    // Real pointer click, same as a finger on the phone. The sheet now
+    // occupies only the area below the header (see the header/sheet
+    // mutual-occlusion fix below), so the header's other trigger is never
+    // covered by it in either direction and a genuine click reaches it —
+    // this is the only input method the owner has; there is no keyboard.
+    await page.getByTestId("chat-trigger").click();
     await expect(page.getByTestId("chat-panel")).toBeVisible();
     // Behavioral branch useIsMobile exists for: on mobile two full-screen
     // sheets stacking is a dead end (the one underneath becomes
@@ -146,13 +157,9 @@ test.describe("mobile viewport (390x844)", () => {
     await page.getByTestId("chat-trigger").click();
     await expect(page.getByTestId("chat-panel")).toBeVisible();
 
-    // See the sibling test above for why this second trigger is activated
-    // via keyboard rather than .click(): with the chat sheet now painting
-    // above the header (the z-index fix this suite also covers), a real
-    // pointer click on the header's gallery-trigger is correctly blocked by
-    // the open sheet intercepting it.
-    await page.getByTestId("gallery-trigger").focus();
-    await page.getByTestId("gallery-trigger").press("Enter");
+    // See the sibling test above — real pointer click, reachable because
+    // the open sheet stops above the header's bottom edge.
+    await page.getByTestId("gallery-trigger").click();
     await expect(page.getByTestId("gallery-panel")).toBeVisible();
     // Mirrors the case above: the same isMobile branch exists in the
     // gallery trigger's onClick. Assert the decision — that chat becomes
@@ -161,18 +168,23 @@ test.describe("mobile viewport (390x844)", () => {
     await expect(page.getByTestId("chat-panel")).toBeHidden();
   });
 
-  // Final-review item 1: the header previously painted over the top strip
-  // of both full-screen sheets (header z-40 vs sheet z-30), hiding each
-  // sheet's own title row — including its close (X) button and, for the
-  // gallery, the select-multiple/delete controls — behind the header. Every
-  // assertion above this point only proves the close button is *present*
+  // Final-review item 1 (round 1): the header previously painted over the
+  // top strip of both full-screen sheets (header z-40 vs sheet z-30),
+  // hiding each sheet's own title row — including its close (X) button
+  // and, for the gallery, the select-multiple/delete controls — behind the
+  // header. Final-review item 1 (round 2, this fix): raising the sheets to
+  // z-50 solved that but created the mirror-image bug — the sheet then
+  // painted over the header's own trigger buttons while open. Every
+  // assertion above this point only proves an element is *present*
   // (`toBeVisible()`) or correctly *sized* (`boundingBox()`); neither one
-  // models paint order, so none of them could have caught that bug. This
-  // is the assertion that closes that blind spot: it checks what a real
-  // finger/pointer actually hits at the button's own centre point, via the
+  // models paint order, so neither bug could have been caught by them. This
+  // is the assertion that closes both blind spots: it checks what a real
+  // finger/pointer actually hits at the element's own centre point, via the
   // same elementFromPoint hit-test the browser itself uses to decide what
   // receives a click — the only reliable way to tell "visible" apart from
-  // "visible but painted over by something else".
+  // "visible but painted over by something else". Used below in both
+  // directions: the sheet's own controls (gallery-close/chat-close) and the
+  // header's triggers (gallery-trigger/chat-trigger) while a sheet is open.
   async function expectHittable(page: import("@playwright/test").Page, testId: string) {
     const el = page.getByTestId(testId);
     await expect(el).toBeVisible();
@@ -198,6 +210,26 @@ test.describe("mobile viewport (390x844)", () => {
     await page.getByTestId("chat-trigger").click();
     await expect(page.getByTestId("chat-panel")).toBeVisible();
     await expectHittable(page, "chat-close");
+  });
+
+  // Final-review item 1 (round 2) — the mirror-image direction: with a
+  // sheet open, the header's OTHER trigger must remain hittable too. This
+  // is what the round-1 fix (z-30 → z-50) broke, and what this round's
+  // layout fix (sheet stops below the header instead of overlapping it)
+  // restores — proven here the same way as the sheet-side case above, not
+  // just by the exclusivity tests passing via a real click.
+  test("header's chat trigger stays hittable, not just present, with the gallery sheet open", async ({ page }) => {
+    await waitForAppReady(page);
+    await page.getByTestId("gallery-trigger").click();
+    await expect(page.getByTestId("gallery-panel")).toBeVisible();
+    await expectHittable(page, "chat-trigger");
+  });
+
+  test("header's gallery trigger stays hittable, not just present, with the chat sheet open", async ({ page }) => {
+    await waitForAppReady(page);
+    await page.getByTestId("chat-trigger").click();
+    await expect(page.getByTestId("chat-panel")).toBeVisible();
+    await expectHittable(page, "gallery-trigger");
   });
 });
 

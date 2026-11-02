@@ -7,6 +7,7 @@ import OutputLightbox from "./components/OutputLightbox";
 import RecipeForm from "./components/RecipeForm";
 import SettingsDialog from "./components/SettingsDialog";
 import Sidebar from "./components/Sidebar";
+import { useHeaderHeightVar } from "./hooks/useHeaderHeightVar";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { LangContext, Language, format, getStoredLang, storeLang, useT } from "./i18n";
 
@@ -19,6 +20,12 @@ export default function App() {
   const t = useT();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Mobile full-screen sheets (OutputsGallery, ChatDrawer) read this via
+  // `var(--fh-header-h)` so they start below the header instead of
+  // overlapping it — see useHeaderHeightVar for why it's measured rather
+  // than hardcoded.
+  const headerRef = useRef<HTMLElement>(null);
+  useHeaderHeightVar(headerRef);
 
   const [backendUrl] = useState(
     () =>
@@ -296,7 +303,7 @@ const execute = async () => {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="relative z-40 flex items-center justify-between border-b border-border bg-panel/70 px-6 py-3.5 backdrop-blur-md">
+        <header ref={headerRef} className="relative z-40 flex items-center justify-between border-b border-border bg-panel/70 px-6 py-3.5 backdrop-blur-md">
           <div className="flex min-w-0 items-center gap-3">
             <button
               data-testid="sidebar-trigger"

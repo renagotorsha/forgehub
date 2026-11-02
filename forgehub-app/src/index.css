@@ -30,6 +30,16 @@ html, body, #root {
   height: 100%;
 }
 
+:root {
+  /* Fallback only — useHeaderHeightVar overwrites this with the header's
+     real measured height before first paint (useLayoutEffect) on any
+     browser with ResizeObserver. Kept as a safety net for the sliver of
+     time before that effect runs (and for environments without
+     ResizeObserver), sized to the single-line header (no workflow
+     description yet). */
+  --fh-header-h: 57px;
+}
+
 body {
   background:
     radial-gradient(1100px 550px at 12% -8%, rgb(124 92 255 / 0.12), transparent 60%),

@@ -58,7 +58,7 @@ export default function ChatDrawer({ client, workflowId, open, onClose }: Props)
   return (
     <div
       data-testid="chat-panel"
-      className="fixed inset-0 z-50 flex w-full shrink-0 flex-col border-l border-border bg-bg-elev backdrop-blur-md md:static md:inset-auto md:z-auto md:w-[340px] md:bg-bg-elev/70"
+      className="fixed inset-x-0 bottom-0 top-[var(--fh-header-h)] z-30 flex w-full shrink-0 flex-col border-l border-border bg-bg-elev backdrop-blur-md md:static md:inset-auto md:z-auto md:w-[340px] md:bg-bg-elev/70"
     >
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight">
