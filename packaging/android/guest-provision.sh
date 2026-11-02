@@ -44,7 +44,7 @@ if [[ -z "${FORGEHUB_REPO_URL:-}" ]]; then
   echo "FATAL: this script needs the git URL of the ForgeHub fork to clone --" >&2
   echo "FATAL: it is not hardcoded because the fork's URL is not yet public." >&2
   echo "FATAL: export it and re-run, e.g.:" >&2
-  echo "FATAL:   FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git bash install.sh" >&2
+  echo "FATAL:   FORGEHUB_REPO_URL=https://github.com/renagotorsha/forgehub.git bash install.sh" >&2
   exit 1
 fi
 FORGEHUB_REPO_BRANCH="${FORGEHUB_REPO_BRANCH:-android}"

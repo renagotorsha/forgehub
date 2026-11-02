@@ -40,7 +40,7 @@
 #                         GUEST. No default -- the fork's URL is not yet
 #                         public (see Task 3's brief, controller ruling 1).
 #                         Example:
-#                           FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git \
+#                           FORGEHUB_REPO_URL=https://github.com/renagotorsha/forgehub.git \
 #                             bash packaging/android/install.sh
 #                         (The Termux-side checkout this script itself runs
 #                         from comes from the same URL -- see the README's
@@ -99,7 +99,7 @@ if [[ -z "${FORGEHUB_REPO_URL:-}" ]]; then
   echo "FATAL: this needs the git URL of the ForgeHub fork to clone into the" >&2
   echo "FATAL: guest -- it is not hardcoded because the fork's URL is not yet" >&2
   echo "FATAL: public. Export it and re-run, e.g.:" >&2
-  echo "FATAL:   FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git bash $0" >&2
+  echo "FATAL:   FORGEHUB_REPO_URL=https://github.com/renagotorsha/forgehub.git bash $0" >&2
   exit 1
 fi
 FORGEHUB_REPO_BRANCH="${FORGEHUB_REPO_BRANCH:-android}"

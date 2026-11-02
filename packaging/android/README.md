@@ -119,7 +119,7 @@ it. Set your fork's URL **once**, in this one place, and reuse it for both
 this checkout and the guest-side one `install.sh` creates next:
 
 ```bash
-export FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git   # ← set this once
+export FORGEHUB_REPO_URL=https://github.com/renagotorsha/forgehub.git   # ← set this once
 export FORGEHUB_REPO_BRANCH=android                               # optional, this is the default
 
 pkg install -y git
@@ -164,7 +164,7 @@ To update later, open a fresh Termux session and run the following
 
 ```bash
 cd ~/ForgeHub
-export FORGEHUB_REPO_URL=https://github.com/<you>/ForgeHub.git
+export FORGEHUB_REPO_URL=https://github.com/renagotorsha/forgehub.git
 export FORGEHUB_REPO_BRANCH=android                                # optional
 
 bash packaging/android/install.sh
