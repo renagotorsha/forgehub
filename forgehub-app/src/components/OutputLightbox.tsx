@@ -124,25 +124,25 @@ export default function OutputLightbox({ output, outputs, onClose, onNavigate, c
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm sm:p-8"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm md:p-8"
       onClick={onClose}
       style={{ animation: "fh-fade-up .18s ease-out" }}
     >
-      <button className="absolute right-3 top-3 rounded-full border border-border bg-panel/80 p-2 text-muted backdrop-blur-md transition-colors hover:border-border-strong hover:text-text sm:right-5 sm:top-5">
+      <button className="absolute right-3 top-3 rounded-full border border-border bg-panel/80 p-2 text-muted backdrop-blur-md transition-colors hover:border-border-strong hover:text-text md:right-5 md:top-5">
         <X size={18} />
       </button>
       {outputs.length > 1 && (
         <>
           <button
             onClick={(e) => { e.stopPropagation(); step(-1); }}
-            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-panel/80 p-2 text-muted backdrop-blur-md transition-all hover:border-accent/50 hover:text-text sm:left-4"
+            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-panel/80 p-2 text-muted backdrop-blur-md transition-all hover:border-accent/50 hover:text-text md:left-4"
             title={t.previous}
           >
             <ChevronLeft size={20} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); step(1); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-panel/80 p-2 text-muted backdrop-blur-md transition-all hover:border-accent/50 hover:text-text sm:right-4"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-panel/80 p-2 text-muted backdrop-blur-md transition-all hover:border-accent/50 hover:text-text md:right-4"
             title={t.next}
           >
             <ChevronRight size={20} />

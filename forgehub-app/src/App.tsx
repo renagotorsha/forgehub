@@ -160,72 +160,75 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [jobsActive]);
 
+  // Single source of truth for "resolve this job's status once". Both the
+  // interval poller below and the visibilitychange re-poll (Doze wake-up)
+  // call this for the same jobId, and it is idempotent per job: resolving a
+  // job always deletes its pollers.current[jobId] entry, and this function
+  // refuses to apply any terminal effect (state removal, outputs, sound)
+  // once that entry is gone — checked once before the fetch (skip the
+  // network call entirely if already resolved) and again right after it
+  // (the sibling caller may have resolved the job while this one was
+  // in flight). Since JS runs the body of a `.then`/`await` continuation
+  // synchronously with no interleaving, whichever caller's continuation
+  // runs first "wins" the resolution and the other is guaranteed to see
+  // the entry already gone — so a job can never be resolved twice.
+  const resolveJob = async (jobId: string) => {
+    if (pollers.current[jobId] === undefined) return;
+    try {
+      const st = await client.getExecutionStatus(jobId);
+      if (pollers.current[jobId] === undefined) return; // resolved by the other caller while this was in flight
+      if (st.status === "running") {
+        setJobs((prev) =>
+          prev[jobId] ? { ...prev, [jobId]: { ...prev[jobId], state: st.remote_status ?? "RUNNING" } } : prev,
+        );
+        return;
+      }
+      window.clearInterval(pollers.current[jobId]);
+      delete pollers.current[jobId];
+      setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
+      if (st.status === "success") {
+        setOutputs((prev) => [...st.outputs, ...prev]);
+        setPreviewKey(null); // follow the freshest output
+        if (st.texts && Object.keys(st.texts).length) setJobTexts(st.texts);
+        playDone();
+      } else if (st.status !== "cancelled") {
+        setError(st.error || "Esecuzione fallita");
+      }
+    } catch (e) {
+      if (pollers.current[jobId] === undefined) return; // resolved by the other caller while this was in flight
+      window.clearInterval(pollers.current[jobId]);
+      delete pollers.current[jobId];
+      setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
+      setError(String(e));
+    }
+  };
+
   // Android suspends the WebView's timers when the screen goes off (Doze),
-  // so an in-flight setInterval poll silently stops. Re-check every active
+  // so an in-flight setInterval poll silently stops. Re-check every tracked
   // job as soon as the tab becomes visible again, so the owner doesn't
-  // unlock the phone to a job that looks stuck forever.
+  // unlock the phone to a job that looks stuck forever. Iterates
+  // pollers.current (a ref, always current synchronously) rather than the
+  // `jobs` state, and shares resolveJob with the interval poller below, so
+  // this never races the resumed interval tick into resolving the same job
+  // twice. Depends only on `client` (effectively constant for the app's
+  // lifetime), so the listener is registered once and not re-added on every
+  // render.
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
-      for (const jobId of Object.keys(jobs)) {
-        client
-          .getExecutionStatus(jobId)
-          .then((st) => {
-            if (st.status === "running") {
-              setJobs((prev) =>
-                prev[jobId] ? { ...prev, [jobId]: { ...prev[jobId], state: st.remote_status ?? "RUNNING" } } : prev,
-              );
-              return;
-            }
-            window.clearInterval(pollers.current[jobId]);
-            setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
-            if (st.status === "success") {
-              setOutputs((prev) => [...st.outputs, ...prev]);
-              setPreviewKey(null);
-              if (st.texts && Object.keys(st.texts).length) setJobTexts(st.texts);
-              playDone();
-            } else if (st.status !== "cancelled") {
-              setError(st.error || "Esecuzione fallita");
-            }
-          })
-          .catch((e) => {
-            window.clearInterval(pollers.current[jobId]);
-            setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
-            setError(String(e));
-          });
+      for (const jobId of Object.keys(pollers.current)) {
+        resolveJob(jobId);
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, client]);
+  }, [client]);
 
   const startPolling = (jobId: string) => {
     setJobs((prev) => ({ ...prev, [jobId]: { state: "IN_QUEUE", startedAt: Date.now() } }));
-    pollers.current[jobId] = window.setInterval(async () => {
-      try {
-        const st = await client.getExecutionStatus(jobId);
-        if (st.status === "running") {
-          setJobs((prev) =>
-            prev[jobId] ? { ...prev, [jobId]: { ...prev[jobId], state: st.remote_status ?? "RUNNING" } } : prev,
-          );
-          return;
-        }
-        window.clearInterval(pollers.current[jobId]);
-        setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
-        if (st.status === "success") {
-          setOutputs((prev) => [...st.outputs, ...prev]);
-          setPreviewKey(null); // follow the freshest output
-          if (st.texts && Object.keys(st.texts).length) setJobTexts(st.texts);
-          playDone();
-        } else if (st.status !== "cancelled") {
-          setError(st.error || "Esecuzione fallita");
-        }
-      } catch (e) {
-        window.clearInterval(pollers.current[jobId]);
-        setJobs((prev) => { const { [jobId]: _, ...rest } = prev; return rest; });
-        setError(String(e));
-      }
+    pollers.current[jobId] = window.setInterval(() => {
+      resolveJob(jobId);
     }, 4000);
   };
 
