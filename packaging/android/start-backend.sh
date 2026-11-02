@@ -49,35 +49,19 @@
 #                        proot-distro (see above). Unset/0 means "really
 #                        running under Termux" and is checked against $PREFIX
 #                        the same way install.sh does.
-#   FORGEHUB_REPO_DIR    PRE-FLIGHT CHECKS ONLY. Where this script looks, from
-#                        the HOST's point of view, to confirm a provisioned
-#                        venv (and optionally a built frontend) exist before
-#                        attempting to launch anything -- see
-#                        REPO_DIR_HOST_VIEW below. Default when unset:
-#                        ${HOME}/ForgeHub under FORGEHUB_NO_TERMUX=1 (this
-#                        script's own $HOME); under real Termux it is not
-#                        read at all -- the host view of the guest's checkout
-#                        is always derived from proot-distro's own rootfs
-#                        layout instead (GUEST_ROOTFS below).
-#                        This variable does NOT change where the backend is
-#                        actually launched from. The launch command
-#                        (GUEST_CMD below) always `cd`s into the GUEST's own
-#                        $HOME -- conventionally /root under proot-distro
-#                        (proot-distro logs in as root by default, the same
-#                        assumption tests/_install_idempotent_inner.sh makes),
-#                        or this script's own $HOME under FORGEHUB_NO_TERMUX=1
-#                        -- matching guest-provision.sh's own hardcoded
-#                        REPO_DIR ("${HOME}/ForgeHub" evaluated INSIDE the
-#                        guest), which likewise never reads this variable.
-#                        Host view and guest view of "the repo directory" are
-#                        two different paths that happen to coincide only
-#                        when this is left at its default; setting it only
-#                        ever moves the pre-flight check, never the launch --
-#                        if the fork is checked out somewhere else, pointing
-#                        this here makes the pre-flight checks look in the
-#                        right place, but the launch will still try the
-#                        guest's default and can fail even though pre-flight
-#                        reported success.
+#   FORGEHUB_REPO_DIR    NOT SUPPORTED -- setting this to anything is a hard
+#                        error (see the check right after the pre-flight
+#                        section below). It used to redirect where this
+#                        script's pre-flight check looks for a provisioned
+#                        venv, but never the GUEST_CMD launch further down
+#                        (which always uses the guest's own $HOME/ForgeHub,
+#                        matching guest-provision.sh's own hardcoded
+#                        REPO_DIR, evaluated INSIDE the guest). That let
+#                        pre-flight report success while pointed at one
+#                        checkout and the launch silently try a different
+#                        one -- a foot-gun with no corresponding benefit, so
+#                        it is rejected outright instead of documented
+#                        around. Leave it unset.
 #   FORGEHUB_HOST        Bind host. Default 127.0.0.1. Changing this away
 #                        from 127.0.0.1 on a real phone defeats controller
 #                        ruling 2 -- don't.
@@ -184,22 +168,26 @@ trap cleanup EXIT
 trap 'cleanup; exit 130' INT
 trap 'cleanup; exit 143' TERM
 
+# FORGEHUB_REPO_DIR is not supported -- see its header comment. Reject it
+# outright rather than let it desynchronize the pre-flight check below from
+# the GUEST_CMD launch further down (which always uses the guest's own
+# $HOME/ForgeHub and never reads this variable).
+if [[ -n "${FORGEHUB_REPO_DIR:-}" ]]; then
+  echo "FATAL: FORGEHUB_REPO_DIR is set ('${FORGEHUB_REPO_DIR}') but is not supported." >&2
+  echo "FATAL: it would only move the pre-flight check below, never the actual launch" >&2
+  echo "FATAL: (which always uses the guest's own \$HOME/ForgeHub) -- so setting it can" >&2
+  echo "FATAL: make pre-flight report success right before the launch fails for an" >&2
+  echo "FATAL: unrelated reason. Unset FORGEHUB_REPO_DIR and re-run." >&2
+  exit 1
+fi
+
 # --- locate the provisioned guest / venv ---
 # HOST VIEW ONLY, for the pre-flight existence checks right below
 # (VENV_UVICORN / FRONTEND_DIST_HOST_VIEW) -- NOT the path the backend is
 # actually launched from. GUEST_CMD further down `cd`s into the GUEST's own
-# $HOME instead, which is a different path (see the FORGEHUB_REPO_DIR comment
-# above) and is never derived from REPO_DIR_HOST_VIEW or FORGEHUB_REPO_DIR.
+# $HOME instead, which is a different path.
 if [[ "${NO_TERMUX}" == "1" ]]; then
-  REPO_DIR_HOST_VIEW="${FORGEHUB_REPO_DIR:-${HOME}/ForgeHub}"
-  if [[ -n "${FORGEHUB_REPO_DIR:-}" ]]; then
-    echo "NOTE: FORGEHUB_REPO_DIR is set ('${FORGEHUB_REPO_DIR}') -- this affects the" >&2
-    echo "NOTE: pre-flight checks below ONLY. The launch command further down always" >&2
-    echo "NOTE: uses the guest's own \$HOME/ForgeHub (matching guest-provision.sh's own" >&2
-    echo "NOTE: hardcoded REPO_DIR, which also never reads this variable). If the fork" >&2
-    echo "NOTE: is not checked out there too, pre-flight can report success here and" >&2
-    echo "NOTE: the launch below can still fail." >&2
-  fi
+  REPO_DIR_HOST_VIEW="${HOME}/ForgeHub"
 else
   # proot-distro's own layout for an installed guest (same path install.sh
   # computes as GUEST_ROOTFS). The guest's root filesystem is a plain
@@ -321,9 +309,8 @@ fi
 # .../installed-rootfs/ubuntu/root/ForgeHub) that is meaningless from inside
 # the guest's own mount view, where the same directory is simply
 # /root/ForgeHub. Splicing REPO_DIR_HOST_VIEW's value in here would be wrong
-# for that path. FORGEHUB_REPO_DIR (see its header comment) therefore cannot
-# reach this line, and does not try to -- it only steers the pre-flight check
-# above, never the launch.
+# for that path -- which is also exactly why FORGEHUB_REPO_DIR (rejected
+# outright above) was never allowed anywhere near this line.
 GUEST_CMD="cd \"\${HOME}/ForgeHub\" && FORGEHUB_WORKFLOW_DIR=\"\${HOME}/ForgeHub/workflows\" FORGEHUB_CORS_ORIGINS=\"${CORS_ORIGINS}\" ${FRONTEND_ENV_ASSIGNMENT}exec .venv/bin/uvicorn forgehub_backend.main:app --host ${HOST} --port ${PORT}"
 
 if [[ "${NO_TERMUX}" == "1" ]]; then
