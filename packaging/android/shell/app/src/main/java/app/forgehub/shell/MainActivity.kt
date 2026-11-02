@@ -47,14 +47,17 @@ import java.util.concurrent.Executors
  */
 class MainActivity : AppCompatActivity() {
 
-    // Cold start on the owner's own phone means: open the app, THEN go
-    // start Termux. 15s covers a `start-backend.sh` that was already
-    // running or started moments before; it is not meant to cover someone
-    // who hasn't touched Termux yet at all -- that case lands on
-    // showUnreachable(), with the manual Retry button for exactly that
-    // "I just started it, give it a second longer" situation (controller
-    // ruling 2: a plain wait-and-retry state, never a WebView error page).
-    private val probeTimeoutMs: Long = 15_000L
+    // Matches start-backend.sh's own readiness budget (it polls
+    // BACKEND_URL for up to 60s before giving up -- see its "polling
+    // ${BACKEND_URL} for up to 60s" step). A shorter probe here would time
+    // out and show showUnreachable() while the script's own wait is still
+    // legitimately in progress -- proot plus uvicorn cold start routinely
+    // takes longer than a few seconds, especially right after
+    // Termux:Boot. The manual Retry button still exists for "I haven't
+    // started it yet at all" (controller ruling 2: a plain wait-and-retry
+    // state, never a WebView error page); onResume() below also re-probes
+    // automatically so switching to Termux and back doesn't require it.
+    private val probeTimeoutMs: Long = 60_000L
 
     private lateinit var rootView: FrameLayout
     private lateinit var webView: WebView
@@ -70,6 +73,13 @@ class MainActivity : AppCompatActivity() {
     // construction, not just by convention.
     private val probeExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Guards against onResume() queuing a second probe on top of one
+    // that's already in flight (e.g. onCreate's initial probe is still
+    // running when onStart/onResume fire right behind it). Written and
+    // read only on the main thread -- the background half of a probe
+    // never touches this, it only reports back to it via mainHandler.post.
+    private var probeInFlight: Boolean = false
 
     // WebChromeClient.onShowFileChooser's callback, held between the call
     // that opens the picker and the ActivityResult that reports what was
@@ -137,6 +147,19 @@ class MainActivity : AppCompatActivity() {
         if (::webView.isInitialized) {
             webView.onResume()
             webView.resumeTimers()
+        }
+
+        // Re-probe on resume, but only while the retry/waiting screen is
+        // still showing and no probe is already running. This is what
+        // makes "switch to Termux, start the backend, switch back" work
+        // without a manual Retry tap -- startProbe() was previously only
+        // reachable from onCreate and the Retry button, so coming back
+        // from the background never re-checked. Skipped once the WebView
+        // is showing so this never reloads it and loses in-page state,
+        // and skipped while a probe is already in flight so this can't
+        // queue a second one behind it.
+        if (::webView.isInitialized && webView.visibility != View.VISIBLE && !probeInFlight) {
+            startProbe(isInitialAttempt = false)
         }
     }
 
@@ -413,6 +436,11 @@ class MainActivity : AppCompatActivity() {
     // ---- backend probe / retry screen --------------------------------------
 
     private fun startProbe(isInitialAttempt: Boolean) {
+        // Set synchronously on the main thread, before showWaiting() or the
+        // executor hand-off below, so a concurrent onResume() checking this
+        // flag can never observe a gap and queue a second probe behind this
+        // one on the (single-thread) executor.
+        probeInFlight = true
         showWaiting(isInitialAttempt)
         probeExecutor.execute {
             // BackendProbe.await() does real network I/O -- it must not run
@@ -420,6 +448,16 @@ class MainActivity : AppCompatActivity() {
             // executor and the post back below.
             val isUp = BackendProbe.await(timeoutMs = probeTimeoutMs)
             mainHandler.post {
+                probeInFlight = false
+                // onDestroy() (triggered by e.g. the owner backing all the
+                // way out, or a config change) can run webView.destroy()
+                // before this posted callback gets its turn on the main
+                // thread -- a probe started just before teardown reports
+                // back after it. Without this guard, showWebView()'s
+                // webView.loadUrl() below would call into a destroyed
+                // WebView. Consistent with the ::webView.isInitialized
+                // guards used elsewhere in this file.
+                if (isFinishing || isDestroyed) return@post
                 if (isUp) showWebView() else showUnreachable()
             }
         }
