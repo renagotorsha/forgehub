@@ -121,7 +121,18 @@ test.describe("mobile viewport (390x844)", () => {
     await page.getByTestId("gallery-trigger").click();
     await expect(page.getByTestId("gallery-panel")).toBeVisible();
 
-    await page.getByTestId("chat-trigger").click();
+    // Since the header-vs-sheet z-index fix (gallery/chat panels now paint
+    // above the header, so the panel's own close button is reachable
+    // instead of hidden under it — see the final-review item this closes),
+    // the header's OTHER trigger sits underneath the open sheet and a real
+    // pointer click on it is correctly blocked by the sheet intercepting
+    // the hit-test, same as a finger on the phone would be. Keyboard
+    // activation (focus + Enter) is not subject to that hit-test — it
+    // fires the button's click handler directly, exactly as it would for a
+    // keyboard/screen-reader user tabbing to it — so it's what's left to
+    // exercise the isMobile exclusivity branch in this trigger's onClick.
+    await page.getByTestId("chat-trigger").focus();
+    await page.getByTestId("chat-trigger").press("Enter");
     await expect(page.getByTestId("chat-panel")).toBeVisible();
     // Behavioral branch useIsMobile exists for: on mobile two full-screen
     // sheets stacking is a dead end (the one underneath becomes
@@ -135,13 +146,58 @@ test.describe("mobile viewport (390x844)", () => {
     await page.getByTestId("chat-trigger").click();
     await expect(page.getByTestId("chat-panel")).toBeVisible();
 
-    await page.getByTestId("gallery-trigger").click();
+    // See the sibling test above for why this second trigger is activated
+    // via keyboard rather than .click(): with the chat sheet now painting
+    // above the header (the z-index fix this suite also covers), a real
+    // pointer click on the header's gallery-trigger is correctly blocked by
+    // the open sheet intercepting it.
+    await page.getByTestId("gallery-trigger").focus();
+    await page.getByTestId("gallery-trigger").press("Enter");
     await expect(page.getByTestId("gallery-panel")).toBeVisible();
     // Mirrors the case above: the same isMobile branch exists in the
     // gallery trigger's onClick. Assert the decision — that chat becomes
     // hidden as a result of opening the gallery — not merely that the
     // gallery appeared.
     await expect(page.getByTestId("chat-panel")).toBeHidden();
+  });
+
+  // Final-review item 1: the header previously painted over the top strip
+  // of both full-screen sheets (header z-40 vs sheet z-30), hiding each
+  // sheet's own title row — including its close (X) button and, for the
+  // gallery, the select-multiple/delete controls — behind the header. Every
+  // assertion above this point only proves the close button is *present*
+  // (`toBeVisible()`) or correctly *sized* (`boundingBox()`); neither one
+  // models paint order, so none of them could have caught that bug. This
+  // is the assertion that closes that blind spot: it checks what a real
+  // finger/pointer actually hits at the button's own centre point, via the
+  // same elementFromPoint hit-test the browser itself uses to decide what
+  // receives a click — the only reliable way to tell "visible" apart from
+  // "visible but painted over by something else".
+  async function expectHittable(page: import("@playwright/test").Page, testId: string) {
+    const el = page.getByTestId(testId);
+    await expect(el).toBeVisible();
+    const hit = await el.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const topmost = document.elementFromPoint(cx, cy);
+      return topmost === node || !!topmost?.contains(node) || !!node.contains(topmost);
+    });
+    expect(hit, `${testId} is covered by another element at its own centre point`).toBe(true);
+  }
+
+  test("gallery sheet's close button is hittable, not just present, with the header behind it", async ({ page }) => {
+    await waitForAppReady(page);
+    await page.getByTestId("gallery-trigger").click();
+    await expect(page.getByTestId("gallery-panel")).toBeVisible();
+    await expectHittable(page, "gallery-close");
+  });
+
+  test("chat sheet's close button is hittable, not just present, with the header behind it", async ({ page }) => {
+    await waitForAppReady(page);
+    await page.getByTestId("chat-trigger").click();
+    await expect(page.getByTestId("chat-panel")).toBeVisible();
+    await expectHittable(page, "chat-close");
   });
 });
 

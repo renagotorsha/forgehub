@@ -58,13 +58,13 @@ export default function ChatDrawer({ client, workflowId, open, onClose }: Props)
   return (
     <div
       data-testid="chat-panel"
-      className="fixed inset-0 z-30 flex w-full shrink-0 flex-col border-l border-border bg-bg-elev backdrop-blur-md md:static md:inset-auto md:z-auto md:w-[340px] md:bg-bg-elev/70"
+      className="fixed inset-0 z-50 flex w-full shrink-0 flex-col border-l border-border bg-bg-elev backdrop-blur-md md:static md:inset-auto md:z-auto md:w-[340px] md:bg-bg-elev/70"
     >
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight">
           <MessageSquare size={14} className="text-accent" /> Prompt assist
         </div>
-        <button onClick={onClose} className="rounded-md p-1.5 text-muted transition-colors hover:bg-panel-hover hover:text-text"><X size={15} /></button>
+        <button data-testid="chat-close" onClick={onClose} className="rounded-md p-1.5 text-muted transition-colors hover:bg-panel-hover hover:text-text"><X size={15} /></button>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
